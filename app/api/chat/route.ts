@@ -33,9 +33,68 @@ type ClientMessage = {
   content: string;
 };
 
+// Per-IP rate limit. In-memory per Lambda instance: Vercel may run several
+// instances in parallel, so the effective ceiling is ~limit × instance_count.
+// Good enough to stop a single bad actor draining the API key; switch to
+// Upstash Redis (@upstash/ratelimit) if traffic ever justifies it.
+const RATE_LIMITS = [
+  { windowMs: 60_000, max: 10 }, // 10 / minute
+  { windowMs: 60 * 60_000, max: 100 }, // 100 / hour
+] as const;
+
+const ipHits = new Map<string, number[]>();
+
+function clientIp(req: Request): string {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  return req.headers.get("x-real-ip") ?? "unknown";
+}
+
+function rateLimit(ip: string): { ok: true } | { ok: false; retryAfter: number } {
+  const now = Date.now();
+  const maxWindow = Math.max(...RATE_LIMITS.map((l) => l.windowMs));
+  const recent = (ipHits.get(ip) ?? []).filter((t) => now - t < maxWindow);
+
+  for (const { windowMs, max } of RATE_LIMITS) {
+    const count = recent.filter((t) => now - t < windowMs).length;
+    if (count >= max) {
+      const oldestInWindow = recent.filter((t) => now - t < windowMs)[0];
+      const retryAfter = Math.ceil((oldestInWindow + windowMs - now) / 1000);
+      return { ok: false, retryAfter: Math.max(retryAfter, 1) };
+    }
+  }
+
+  recent.push(now);
+  ipHits.set(ip, recent);
+
+  // Opportunistic GC so the map doesn't grow unbounded.
+  if (ipHits.size > 2000) {
+    for (const [k, ts] of ipHits) {
+      if (ts.every((t) => now - t > maxWindow)) ipHits.delete(k);
+    }
+  }
+
+  return { ok: true };
+}
+
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return new Response("Missing ANTHROPIC_API_KEY", { status: 500 });
+  }
+
+  const ip = clientIp(req);
+  const limit = rateLimit(ip);
+  if (!limit.ok) {
+    return new Response(
+      `Rate limit exceeded. Try again in ${limit.retryAfter}s.`,
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(limit.retryAfter),
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      }
+    );
   }
 
   let body: { messages?: ClientMessage[] };
