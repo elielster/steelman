@@ -27,6 +27,6 @@ Open <http://localhost:3000>.
 
 - Next.js App Router (15)
 - Tailwind CSS
-- Anthropic SDK (`@anthropic-ai/sdk`) — model `claude-haiku-4-5-20251001`
+- Anthropic SDK (`@anthropic-ai/sdk`) — model `claude-sonnet-4-6`
 - Streaming responses via `/api/chat`
 - API key stays server-side
