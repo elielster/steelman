@@ -7,7 +7,7 @@ aggressively — no hedging, no conceding, ever.
 
 ## Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FYOUR_USER%2Fadversary&env=ANTHROPIC_API_KEY&envDescription=Anthropic%20API%20key%20from%20console.anthropic.com&project-name=adversary&repository-name=adversary)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Felielster%2Fadversary&env=ANTHROPIC_API_KEY&envDescription=Anthropic%20API%20key%20from%20console.anthropic.com&project-name=adversary&repository-name=adversary)
 
 Set `ANTHROPIC_API_KEY` when prompted. Get one at
 <https://console.anthropic.com/>.
