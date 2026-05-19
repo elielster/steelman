@@ -1,9 +1,11 @@
-# Adversary
+# Steel Man
 
-An AI that argues against everything you say with unhinged confidence.
+A chatbot that will always present the strongest possible argument for
+whatever you don't believe.
 
-Whatever position you take, Adversary takes the opposite and defends it
-aggressively — no hedging, no conceding, ever.
+State a position. Steel Man takes the opposite stance and defends it with
+specific, well-reasoned counterarguments — championship-debate quality,
+no fabricated facts, won't deny established science.
 
 ## Deploy
 
