@@ -45,19 +45,36 @@ export async function POST(req: Request) {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  const messages = (body.messages ?? [])
-    .filter(
-      (m) =>
-        m &&
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.length > 0
-    )
-    .map((m) => ({ role: m.role, content: m.content }));
+  const cleaned = (body.messages ?? []).filter(
+    (m) =>
+      m &&
+      (m.role === "user" || m.role === "assistant") &&
+      typeof m.content === "string" &&
+      m.content.length > 0
+  );
 
-  if (messages.length === 0) {
+  if (cleaned.length === 0) {
     return new Response("No messages", { status: 400 });
   }
+
+  // Prompt caching: mark the system prompt and the final message as cache
+  // breakpoints. On turn N+1, the prefix through turn N's final message will
+  // be a cache hit (~10% of base input cost) instead of a full re-read.
+  // First-turn writes are no-ops if the prefix is under the model's minimum
+  // cacheable token count (1024 for Sonnet).
+  const apiMessages = cleaned.map((m, i) => {
+    const isLast = i === cleaned.length - 1;
+    return {
+      role: m.role,
+      content: [
+        {
+          type: "text" as const,
+          text: m.content,
+          ...(isLast ? { cache_control: { type: "ephemeral" as const } } : {}),
+        },
+      ],
+    };
+  });
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -68,8 +85,14 @@ export async function POST(req: Request) {
         const response = await client.messages.stream({
           model: "claude-sonnet-4-6",
           max_tokens: 2048,
-          system: SYSTEM_PROMPT,
-          messages,
+          system: [
+            {
+              type: "text",
+              text: SYSTEM_PROMPT,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          messages: apiMessages,
         });
 
         for await (const event of response) {
@@ -78,6 +101,11 @@ export async function POST(req: Request) {
             event.delta.type === "text_delta"
           ) {
             controller.enqueue(encoder.encode(event.delta.text));
+          } else if (event.type === "message_start") {
+            const u = event.message.usage;
+            console.log(
+              `[cache] input=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0}`
+            );
           }
         }
         controller.close();
